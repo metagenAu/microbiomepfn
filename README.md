@@ -105,6 +105,19 @@ microbiomepfn-train --n_steps 100000 --d 512 --n_layers 8 --lr 3e-4 \
                     --n_taxa_cap 800 --n_samples_cap 250 --device cuda
 ```
 
+**Recommended recipe for differential-abundance / treatment use.** The outcome (`y`)
+head currently cannot learn (labels aren't fed to the model — see
+[`NOTES_FROM_BOOTSTRAP.md`](NOTES_FROM_BOOTSTRAP.md)), so for DA work disable the `y`
+and auxiliary-effect terms and let the count head get the full gradient, train
+treatment-aware, and cap generated draw size to speed up:
+```bash
+microbiomepfn-train --use_treatment --p_treatment_study 0.5 \
+                    --y_weight 0.0 --effect_weight 0.0 \
+                    --max_gen_taxa 600 --max_gen_samples 200 \
+                    --n_steps 100000 --d 512 --n_layers 8 --device cuda
+```
+Judge such a model on **treatment-effect recovery** (`notebooks/validation.ipynb`, experiment 6), not on held-out-cell ρ.
+
 ### 2. Evaluate held-out cells
 ```bash
 microbiomepfn-eval checkpoints/model_step100000.pt

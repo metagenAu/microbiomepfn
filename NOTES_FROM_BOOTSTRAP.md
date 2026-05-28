@@ -90,3 +90,47 @@ the training loop, deliberately:
   `notebooks/train_t4.ipynb` on a real GPU.
 
 See `notebooks/train_t4.ipynb` for a Colab/T4 training + evaluation walkthrough.
+
+### Generated-draw size caps in `train.py`
+`train(...)` (and the CLI) gained `max_gen_taxa` / `max_gen_samples`. The prior
+otherwise samples up to `n_taxa_range[1]=1500` taxa / `n_samples_range[1]=500`
+samples *every step* and then subsamples down to `n_taxa_cap` / `n_samples_cap`
+— so the heavy CPU sampling (tree, BM, Dirichlet-multinomial) runs at full size
+regardless of the caps. These knobs shrink the *generated* ranges to cut that
+cost. Defaults are `None` (validated ranges untouched). `--y_weight` /
+`--effect_weight` were also surfaced on the CLI (they already existed on `train()`).
+
+## Findings from training runs (flag, not fixed)
+
+### The outcome (`y`) head cannot learn as currently wired
+Observed in a 78k-step run: the **binary `y` loss stays pinned at 0.693 = ln 2
+(chance) indefinitely**, and continuous `y` loss hovers at ~1.0 (= variance of the
+standardized target, i.e. "predict the mean"). This is a structural limitation,
+not undertraining:
+
+- The model's inputs are `cell_feats`, `tax_feats`, `samp_feats`. **The label `y`
+  is never fed into the model** — `features.sample_features` includes the
+  context/query *visibility flag* but not the label values.
+- Each prior draw generates a **fresh random `y` function** (random sparse
+  `w_taxa`, `w_cov`). So there is no fixed features→`y` mapping to learn across
+  draws, and the model is never shown the draw's context labels to infer the
+  draw-specific function (as a TabPFN-style ICL setup would require).
+- `deploy.predict_y` has the same gap: it sets `visible_sample = context_mask`
+  but never passes `y_context` into the model.
+
+Net: the `y`/few-shot-outcome head optimizes to "predict the marginal," which is
+exactly ln 2 for balanced binary. The **count/MLM task is unaffected and sound**
+(the model does see visible cells and predict masked ones), and the README's
+headline use — differential abundance via `interpret.py` counterfactuals — runs
+through the count head, not `y`. But the few-shot `y`-prediction capability needs
+a real design change (feed context labels into the input) to work. Left unfixed.
+
+### Held-out cell prediction is conditional-structure-dependent (not a bug)
+On a no-treatment 78k checkpoint, aggregate held-out Spearman ρ barely beat the
+marginal-mean baseline (+0.013), but stratifying by per-draw covariate structure
+showed the model **+0.028 on high-structure draws** and **−0.024 on
+near-marginal draws**. So the model does learn covariate→taxon structure; the flat
+aggregate is dilution from marginal-dominated draws (where there is little to gain
+and the model adds slight harmful variance). Setting `y_weight=0`/`effect_weight=0`
+(count-focused) and training treatment-aware are the recommended next levers — no
+code change required for the loss weights.
