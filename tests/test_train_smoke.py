@@ -50,7 +50,8 @@ def test_five_step_training_run():
                             cell_mask_frac=0.15, sample_query_frac=0.3)
         batch = _pad_sample_feats(batch, D_SAMP)
         bt = batch_to_torch(batch, torch.device("cpu"))
-        stats = train_step(model, bt, opt)
+        # Explicitly take the fp32 (no-AMP) path; AMP/fp16 autocast is CUDA-only.
+        stats = train_step(model, bt, opt, scaler=None, use_amp=False)
         losses.append(stats["loss"])
 
     assert len(losses) == 5

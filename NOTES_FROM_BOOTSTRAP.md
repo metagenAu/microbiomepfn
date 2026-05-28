@@ -1,8 +1,10 @@
 # Notes from bootstrap
 
 This file records things noticed while packaging the existing source into a
-proper Python project. **No scientific/numerical logic was changed.** The only
-edits to source files were:
+proper Python project. **In the initial bootstrap commit, no scientific/numerical
+logic was changed** (a later, explicitly-requested change added mixed precision —
+see "Post-bootstrap changes" at the bottom). The only edits to source files in the
+bootstrap commit were:
 
 1. Rewriting intra-package imports (`from prior import …` → `from microbiomepfn.prior import …`, etc.).
 2. Adding two thin `main()` wrappers (in `train.py` and `eval.py`) around the
@@ -68,3 +70,23 @@ per-file-ignore list and clean them up — they're all low-risk.
   Actions URL — replace it with your org/user after the repo is pushed.
 - `LICENSE` copyright line reads `Copyright (c) 2026 Metagen` (inferred from the
   configured author email). Adjust the holder name if that's not right.
+
+## Post-bootstrap changes
+
+### Mixed precision (AMP) in `train.py`
+Added on request to make training on a T4-class GPU practical. This *does* touch
+the training loop, deliberately:
+
+- `train_step(...)` gained `scaler` and `use_amp` params. When `use_amp=True` the
+  model forward runs under `torch.autocast(dtype=float16)` and backward/step go
+  through a `GradScaler`. The NB/ZINB loss (lgamma/exp) is unsafe in fp16, so model
+  outputs are upcast to fp32 before `compute_loss`. **With `use_amp=False` (the
+  default for `train_step`) the path is the original fp32 code, unchanged.**
+- `train(...)` gained `use_amp=True` (only active on CUDA — fp32 on CPU) and builds
+  the `GradScaler`; the CLI gained `--no_amp`.
+- The fp16 AMP branch is **CUDA-only and not unit-tested**: CPU autocast supports
+  bfloat16, not fp16, so it can't be exercised on the CI runners. `test_train_smoke.py`
+  pins the fp32 (`use_amp=False`) path; the AMP branch is exercised manually via
+  `notebooks/train_t4.ipynb` on a real GPU.
+
+See `notebooks/train_t4.ipynb` for a Colab/T4 training + evaluation walkthrough.

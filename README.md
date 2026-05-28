@@ -91,6 +91,9 @@ Three commitments make "predict on any new taxon at deployment" a real claim:
 ## Workflow
 
 ### 1. Pretrain
+
+> For a one-click GPU run, open [`notebooks/train_t4.ipynb`](notebooks/train_t4.ipynb) in Google Colab (T4 runtime). It installs the package, pretrains with mixed precision, and evaluates a checkpoint. Mixed precision (fp16 AMP) is on by default on CUDA; add `--no_amp` to force fp32.
+
 ```bash
 # With the validated prior alone:
 microbiomepfn-train --n_steps 100000 --d 512 --n_layers 8 --lr 3e-4 \
@@ -180,5 +183,5 @@ The intended use case for this package, in order:
 - **Sample feature dim padded to 200.** Hacky. Cleaner long-term solution: covariates-as-tokens.
 - **No phylo attention bias.** Phylo info enters via per-taxon features only.
 - **Effect head predicts L2 norm of effects** as weak auxiliary; for actual differential-abundance interpretation, use `interpret.py` counterfactual perturbation, not the effect head.
-- **CPU is too slow** for serious training. Need GPU, mixed precision; serious runs need ~1M+ steps.
+- **CPU is too slow** for serious training. Use a GPU — mixed precision (fp16 AMP) is built into `train.py` and on by default on CUDA; serious runs still need ~1M+ steps.
 - **Treatment extension is not KS-validated.** Use it judiciously and check whether your real deployment data shows the asymmetric patterns it models.

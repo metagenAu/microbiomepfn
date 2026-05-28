@@ -59,16 +59,30 @@ def train_step(model: MicrobiomePFN, batch_t: dict,
                grad_clip: float = 1.0,
                use_zinb: bool = True,
                y_weight: float = 0.3,
-               effect_weight: float = 0.0) -> dict:
+               effect_weight: float = 0.0,
+               scaler: Optional["torch.amp.GradScaler"] = None,
+               use_amp: bool = False) -> dict:
+    """One optimizer step.
+
+    When ``use_amp`` is True the model forward runs under fp16 autocast and the
+    backward/step are wrapped in ``scaler`` (gradient scaling). The NB/ZINB
+    likelihood uses lgamma/exp, which are not safe in fp16, so the model outputs
+    are upcast to fp32 before the loss is assembled. With ``use_amp=False``
+    (the default) this is the original fp32 path, bit-for-bit.
+    """
     model.train()
+    device = batch_t['cell_feats'].device
     log_lib = torch.log(batch_t['library_sizes'].float().clamp(min=1))
-    out = model(
-        cell_feats=batch_t['cell_feats'],
-        tax_feats=batch_t['tax_feats'],
-        samp_feats=batch_t['samp_feats'],
-        visible_cell=batch_t['visible_cell'],
-        log_library=log_lib,
-    )
+    with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+        out = model(
+            cell_feats=batch_t['cell_feats'],
+            tax_feats=batch_t['tax_feats'],
+            samp_feats=batch_t['samp_feats'],
+            visible_cell=batch_t['visible_cell'],
+            log_library=log_lib,
+        )
+    if use_amp:
+        out = {k: (v.float() if torch.is_tensor(v) else v) for k, v in out.items()}
     losses = compute_loss(
         out=out,
         counts=batch_t['counts'],
@@ -82,9 +96,16 @@ def train_step(model: MicrobiomePFN, batch_t: dict,
         effect_weight=effect_weight,
     )
     optimizer.zero_grad(set_to_none=True)
-    losses['loss'].backward()
-    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-    optimizer.step()
+    if scaler is not None and use_amp:
+        scaler.scale(losses['loss']).backward()
+        scaler.unscale_(optimizer)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        scaler.step(optimizer)
+        scaler.update()
+    else:
+        losses['loss'].backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        optimizer.step()
     return dict(
         loss=float(losses['loss'].item()),
         loss_count=float(losses['loss_count'].item()),
@@ -147,12 +168,18 @@ def train(
     save_dir: str = 'checkpoints',
     use_treatment: bool = False,             # if True, use prior_treatment instead
     p_treatment_study: float = 0.4,          # only used when use_treatment=True
+    use_amp: bool = True,                    # mixed precision; only active on CUDA
 ):
     if device_str == 'auto':
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     else:
         device = torch.device(device_str)
     print(f'Device: {device}')
+
+    # Mixed precision: only meaningful on CUDA (e.g. a T4). On CPU we keep fp32.
+    amp_active = use_amp and device.type == 'cuda'
+    scaler = torch.amp.GradScaler('cuda') if amp_active else None
+    print(f'Mixed precision (fp16 AMP): {"on" if amp_active else "off"}')
 
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
@@ -237,7 +264,8 @@ def train(
         try:
             stats = train_step(model, bt, opt, grad_clip=grad_clip,
                                use_zinb=use_zinb, y_weight=y_weight,
-                               effect_weight=effect_weight)
+                               effect_weight=effect_weight,
+                               scaler=scaler, use_amp=amp_active)
         except torch.cuda.OutOfMemoryError:
             print(f'  step {step}: OOM at N={N}, T={T}; skipping')
             torch.cuda.empty_cache()
@@ -427,6 +455,8 @@ def main():
                         help='Use prior_treatment (validated prior + treatment extension)')
     parser.add_argument('--p_treatment_study', type=float, default=0.4,
                         help='Only used if --use_treatment is set')
+    parser.add_argument('--no_amp', action='store_true',
+                        help='Disable mixed precision (AMP) even on CUDA')
     args = parser.parse_args()
 
     train(n_steps=args.n_steps, d=args.d, n_layers=args.n_layers,
@@ -434,7 +464,8 @@ def main():
           n_taxa_cap=args.n_taxa_cap, n_samples_cap=args.n_samples_cap,
           seed=args.seed, device_str=args.device, save_dir=args.save_dir,
           use_treatment=args.use_treatment,
-          p_treatment_study=args.p_treatment_study)
+          p_treatment_study=args.p_treatment_study,
+          use_amp=not args.no_amp)
 
 
 if __name__ == '__main__':
