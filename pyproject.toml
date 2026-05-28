@@ -75,3 +75,6 @@ ignore = [
 # Test files (which we wrote) are held to the full rule set.
 # E741 covers the intentional names `I` (ISAB inducing points) and `l` (tree loop).
 "src/microbiomepfn/*" = ["F401", "F841", "E702", "E741"]
+# Notebooks use the compact `plt.xlabel(...); plt.ylabel(...)` plotting idiom (E702).
+# Everything else (unused imports, undefined names, ...) is still enforced.
+"notebooks/*" = ["E702"]

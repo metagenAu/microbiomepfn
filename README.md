@@ -110,6 +110,8 @@ microbiomepfn-train --n_steps 100000 --d 512 --n_layers 8 --lr 3e-4 \
 microbiomepfn-eval checkpoints/model_step100000.pt
 ```
 
+> For a fuller validation battery — held-out prediction vs baseline, calibration curve, generalization across dataset size, permutation-equivariance of the trained weights, the compositional constraint, and treatment-effect recovery vs ground truth — open [`notebooks/validation.ipynb`](notebooks/validation.ipynb) (point `CHECKPOINT` at your model).
+
 ### 3. Fine-tune on your trials
 ```python
 from microbiomepfn.finetune import build_real_dataset, finetune
