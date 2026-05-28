@@ -163,6 +163,8 @@ def train(
     effect_weight: float = 0.05,
     n_taxa_cap: int = 600,           # subsample taxa if larger, for training speed
     n_samples_cap: int = 200,        # subsample samples if larger
+    max_gen_taxa: Optional[int] = None,    # cap the prior's *generated* T (cuts CPU cost)
+    max_gen_samples: Optional[int] = None,  # cap the prior's *generated* N
     seed: int = 0,
     device_str: str = 'auto',
     save_dir: str = 'checkpoints',
@@ -198,6 +200,19 @@ def train(
         sample_fn = sample_dataset
         cfg = PriorConfig()
         print('Using validated prior (no treatment extension)')
+
+    # Optionally cap the *generated* draw size. The prior otherwise samples up to
+    # n_taxa_range[1] taxa / n_samples_range[1] samples every step and then
+    # subsamples down to the *_cap — so the heavy CPU work (tree, BM, DM sampling)
+    # is done at full size regardless of the caps. Shrinking the generated ranges
+    # cuts that cost directly. Defaults (None) leave the validated ranges untouched.
+    if max_gen_taxa is not None:
+        cfg.n_taxa_range = (min(cfg.n_taxa_range[0], max_gen_taxa), max_gen_taxa + 1)
+    if max_gen_samples is not None:
+        cfg.n_samples_range = (min(cfg.n_samples_range[0], max_gen_samples), max_gen_samples + 1)
+    if max_gen_taxa is not None or max_gen_samples is not None:
+        print(f'Generated-draw caps: n_taxa_range={cfg.n_taxa_range}, '
+              f'n_samples_range={cfg.n_samples_range}')
 
     # Probe one draw to find input feature dimensions
     probe_ds = sample_fn(cfg=cfg, rng=np.random.default_rng(seed + 1))
@@ -448,6 +463,14 @@ def main():
     parser.add_argument('--lr', type=float, default=3e-4)
     parser.add_argument('--n_taxa_cap', type=int, default=600)
     parser.add_argument('--n_samples_cap', type=int, default=200)
+    parser.add_argument('--max_gen_taxa', type=int, default=None,
+                        help='Cap the prior-generated number of taxa (cuts CPU cost)')
+    parser.add_argument('--max_gen_samples', type=int, default=None,
+                        help='Cap the prior-generated number of samples')
+    parser.add_argument('--y_weight', type=float, default=0.3,
+                        help='Weight on the outcome (y) loss; set 0 to disable the y head')
+    parser.add_argument('--effect_weight', type=float, default=0.05,
+                        help='Weight on the auxiliary effect loss; set 0 to disable')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--device', type=str, default='auto')
     parser.add_argument('--save_dir', type=str, default='checkpoints')
@@ -462,6 +485,8 @@ def main():
     train(n_steps=args.n_steps, d=args.d, n_layers=args.n_layers,
           n_heads=args.n_heads, base_lr=args.lr,
           n_taxa_cap=args.n_taxa_cap, n_samples_cap=args.n_samples_cap,
+          max_gen_taxa=args.max_gen_taxa, max_gen_samples=args.max_gen_samples,
+          y_weight=args.y_weight, effect_weight=args.effect_weight,
           seed=args.seed, device_str=args.device, save_dir=args.save_dir,
           use_treatment=args.use_treatment,
           p_treatment_study=args.p_treatment_study,

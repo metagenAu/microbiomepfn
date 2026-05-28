@@ -9,7 +9,7 @@ import torch
 from microbiomepfn.prior import PriorConfig, sample_dataset
 from microbiomepfn.features import build_batch
 from microbiomepfn.model import MicrobiomePFN
-from microbiomepfn.train import batch_to_torch, train_step, _pad_sample_feats
+from microbiomepfn.train import batch_to_torch, train_step, _pad_sample_feats, train
 
 K_PHYLO = 16
 D_SAMP = 64
@@ -60,3 +60,21 @@ def test_five_step_training_run():
 
     after = model.count_head[0].weight.detach()
     assert not torch.allclose(before, after), "parameters did not change after training"
+
+
+def test_train_driver_with_capped_generation(tmp_path):
+    """End-to-end train() on CPU with capped generated-draw size (the new
+    max_gen_* knobs), AMP off. Confirms the driver runs, loss is finite, the
+    generation caps keep it fast, and a checkpoint is written."""
+    model, history = train(
+        n_steps=3, d=32, n_layers=2, n_heads=4, m_inducing=8, k_phylo=K_PHYLO,
+        warmup_steps=1, max_gen_taxa=60, max_gen_samples=40,
+        y_weight=0.0, effect_weight=0.0,  # count-focused recipe
+        device_str="cpu", save_dir=str(tmp_path), use_amp=False,
+        log_every=1, save_every=100,
+    )
+    assert len(history) >= 1
+    for rec in history:
+        assert np.isfinite(rec["loss"]), f"non-finite loss in history: {rec}"
+        assert rec["T"] <= 60 and rec["N"] <= 40  # generation caps respected
+    assert list(tmp_path.glob("model_step*.pt")), "no checkpoint written"
