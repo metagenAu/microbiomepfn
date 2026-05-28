@@ -1,10 +1,8 @@
 # Microbiome PFN
 
-[![CI](https://github.com/OWNER/microbiomepfn/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/microbiomepfn/actions/workflows/ci.yml)
+[![CI](https://github.com/metagenAu/microbiomepfn/actions/workflows/ci.yml/badge.svg)](https://github.com/metagenAu/microbiomepfn/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-
-> Replace `OWNER` in the CI badge with your GitHub org/user once the repo is pushed.
 
 Microbiome PFN is a TabPFN-style foundation model for amplicon (16S) microbiome count
 data. Instead of being fit to one dataset, it is trained on a stream of synthetic draws
