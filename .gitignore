@@ -1,0 +1,51 @@
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Build artifacts / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# Model checkpoints
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Data dumps
+*.csv
+*.tsv
+*.biom
+*.parquet
+*.feather
+*.h5
+*.hdf5
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Editor / OS cruft
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

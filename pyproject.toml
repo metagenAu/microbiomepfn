@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "microbiomepfn"
+version = "0.1.0"
+description = "TabPFN-style foundation model for amplicon (16S) microbiome count data, trained on a phylogeny-aware compositional prior validated against real ASV data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Metagen", email = "chris@metagen.com.au" }]
+keywords = ["microbiome", "amplicon", "16S", "TabPFN", "foundation-model", "phylogenetics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "numpy",
+    "torch",
+    "scipy",
+]
+
+[project.optional-dependencies]
+# Used by the prior-validation notebook only.
+validation = [
+    "pandas",
+    "matplotlib",
+]
+# Tooling needed to run the test suite and linter (used by CI).
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+microbiomepfn-train = "microbiomepfn.train:main"
+microbiomepfn-eval = "microbiomepfn.eval:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/microbiomepfn"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Conservative rule set for a research codebase: pyflakes (F) + a subset of
+# pycodestyle (E/W). We deliberately do not enable opinionated style/refactor
+# rules — this repo packages existing, validated code rather than restyling it.
+select = ["F", "E", "W"]
+ignore = [
+    "E501",  # line length handled loosely; long descriptive lines are fine here
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The packaged source under src/ is existing, validated research code. During
+# bootstrap we rewrote only import paths (and added two main() wrappers), not
+# style. These pre-existing nits — unused imports (F401), one unused local
+# (F841), and semicolon-joined statements in the tree sampler (E702) — are left
+# untouched on purpose rather than refactored. See NOTES_FROM_BOOTSTRAP.md.
+# Test files (which we wrote) are held to the full rule set.
+# E741 covers the intentional names `I` (ISAB inducing points) and `l` (tree loop).
+"src/microbiomepfn/*" = ["F401", "F841", "E702", "E741"]
